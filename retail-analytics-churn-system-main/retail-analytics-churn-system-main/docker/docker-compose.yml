@@ -1,0 +1,91 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: riap-postgres
+    restart: always
+
+    env_file:
+      - ../.env
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    ports:
+      - "${POSTGRES_PORT}:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  airflow:
+    image: apache/airflow:2.7.1
+    container_name: riap-airflow
+    restart: always
+
+    depends_on:
+      - postgres
+
+    env_file:
+      - ../.env
+
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://riap_user:riap_pass@postgres:5432/riap_db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PYTHONPATH=/opt/airflow
+
+      # Install dependencies properly
+      - _PIP_ADDITIONAL_REQUIREMENTS=pandas scikit-learn xgboost==1.7.6 joblib psycopg2-binary
+
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../backend:/opt/airflow/backend
+      - ../data:/opt/airflow/data
+      - ../models:/opt/airflow/models
+
+    ports:
+      - "8080:8080"
+
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com &&
+      airflow webserver --port 8080
+      "
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.1
+    container_name: riap-airflow-scheduler
+    restart: always
+
+    depends_on:
+      - postgres
+
+    env_file:
+      - ../.env
+
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://riap_user:riap_pass@postgres:5432/riap_db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PYTHONPATH=/opt/airflow
+
+      # Same dependencies here too
+      - _PIP_ADDITIONAL_REQUIREMENTS=pandas scikit-learn xgboost==1.7.6 joblib psycopg2-binary
+
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../backend:/opt/airflow/backend
+      - ../data:/opt/airflow/data
+      - ../models:/opt/airflow/models
+
+    command: >
+      bash -c "
+      airflow scheduler
+      "
+
+volumes:
+  postgres_data:
